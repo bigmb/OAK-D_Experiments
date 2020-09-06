@@ -1,8 +1,8 @@
 # OAK-D_Experiments
 This repository contains examples of using depthai API with OAK-D.
 
-[Link to the depthai website](https://luxonis.com/depthai)
-[Link to the depthai documentation](https://docs.luxonis.com/)
+* [Link to the depthai website](https://luxonis.com/depthai)
+* [Link to the depthai documentation](https://docs.luxonis.com/)
 
 Depthai is a great boon for the real time SpatialAI community.
 
