@@ -43,6 +43,12 @@ pipeline = device.create_pipeline(config={
 if pipeline is None:
     raise RuntimeError('Pipeline creation failed!')
 
+out_h,out_w = [300,300]
+output_file = "ObjectDetetWithDistance.avi"
+fps = 30
+fourcc = cv2.VideoWriter_fourcc(*'XVID')
+out_wr = cv2.VideoWriter(output_file,fourcc,fps,(out_w,out_h))
+
 with open(consts.resource_paths.blob_config_fpath) as f:
     data = json.load(f)
 
@@ -86,15 +92,15 @@ while True:
                 
                 cv2.rectangle(frame, pt1, pt2, (0, 0, 255), 2)
                 cv2.putText(frame,labels[int(e['label'])],(pt1[0],pt1[1]),5,1,(255,255,255))
-                cv2.putText(frame,"X: %.2f"%e['distance_x'],(pt1[0],pt1[1]+20),5,1,(255,255,255))
-                cv2.putText(frame,"Y: %.2f"%e['distance_y'],(pt1[0],pt1[1]+30),5,1,(255,255,255))
-                cv2.putText(frame,"Z: %.2f"%e['distance_z'],(pt1[0],pt1[1]+40),5,1,(255,255,255))
+                cv2.putText(frame,"Z: %.2f m"%e['distance_z'],(pt1[0],pt1[1]+30),5,1,(255,255,255))
 
             cv2.imshow('previewout', frame)
+            out_wr.write(frame)
 
     if cv2.waitKey(1) == ord('q'):
         break
 
+out_wr.release()
 # The pipeline object should be deleted after exiting the loop. Otherwise device will continue working.
 # This is required if you are going to add code after exiting the loop.
 del pipeline
