@@ -48,7 +48,14 @@ The beauty of OAK-D is that it makes the process of generating the disparity map
 
 A small modification to the first object detection code - also reading and displaying the distance of the detected obects.
 
-**NEED HELP TO SOLVE THE ERROR IN THIS CODE**
+This code shows how to :
+1. Initialise the device.
+2. Get the data packets from the device. (The bounding box and the rgb frame)
+3. Draw the bounding box using the extracted bounding box information on the extracted image from the stream.
+4. Read the distance information and print it along with the bounding box.
+5. Display the output.
+
+![Object detection with distance](exp/objDetectWithDist.gif)
 
 
 
