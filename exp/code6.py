@@ -12,7 +12,7 @@ This code is a simple example of how to get started with the depthai API. It sho
 Useage:
     python3 code6.py
 """
-
+import json
 import sys
 sys.path.append('/home/pi/depthai/')
 import consts.resource_paths
@@ -35,13 +35,22 @@ pipeline = device.create_pipeline(config={
       },
     'ai': {
         "blob_file": consts.resource_paths.blob_fpath,
-        "blob_file_config": consts.resource_paths.blob_config_fpath,
+        "blob_file_config": "/home/pi/depthai/resources/nn/mobilenet-ssd/mobilenet-ssd_depth.json",
         "calc_dist_to_bb": True,
     },
 })
 
 if pipeline is None:
     raise RuntimeError('Pipeline creation failed!')
+
+with open(consts.resource_paths.blob_config_fpath) as f:
+    data = json.load(f)
+
+try:
+    labels = data['mappings']['labels']
+except:
+    labels = None
+    print("Labels not found in json!")
 
 entries_prev = []
 
@@ -74,11 +83,12 @@ while True:
             for e in entries_prev:
                 pt1 = int(e['left'] * img_w), int(e['top'] * img_h)
                 pt2 = int(e['right'] * img_w), int(e['bottom'] * img_h)
-                ##########################   FACING ERROR.... Help please!!   ###################
-                print(e['distance_x'])
-                #################################################################################
                 
                 cv2.rectangle(frame, pt1, pt2, (0, 0, 255), 2)
+                cv2.putText(frame,labels[int(e['label'])],(pt1[0],pt1[1]),5,1,(255,255,255))
+                cv2.putText(frame,"X: %.2f"%e['distance_x'],(pt1[0],pt1[1]+20),5,1,(255,255,255))
+                cv2.putText(frame,"Y: %.2f"%e['distance_y'],(pt1[0],pt1[1]+30),5,1,(255,255,255))
+                cv2.putText(frame,"Z: %.2f"%e['distance_z'],(pt1[0],pt1[1]+40),5,1,(255,255,255))
 
             cv2.imshow('previewout', frame)
 
