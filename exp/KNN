@@ -1,0 +1,239 @@
+
+import os
+import tensorflow as tf
+import pandas as pd
+import numpy as np
+import annoy as annoy
+import cv2
+import numpy as np
+import scipy
+import pickle
+import random
+import os
+import matplotlib.pyplot as plt
+import time
+import json
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import train_test_split
+from imutils import paths
+import argparse
+import imutils
+from matplotlib.colors import ListedColormap
+
+
+
+img_folder = '/home/malav/Desktop/images/'
+img_test_1 = '/home/malav/Desktop/images/bo7025u0pmo000c6e6mg'
+images = os.listdir(img_folder)
+len(images)
+val_file = '/home/malav/Downloads/val_pred.csv'
+val_file_short= '/home/malav/Downloads/val_file_short.csv'
+
+##time function
+def timer(func):
+    def wrapper(*args,**kwargs):
+        before = time.time()
+        a = func(*args,**kwargs)
+        print('function time : ',time.time() - before, "seconds" )
+        return a
+    return wrapper
+
+##getting the features 
+class image_loading_and_visualization(object):
+
+    def __init__(self,image):
+        self.image= image
+        return None
+    
+    @timer
+    def load_img_wth_tensors(self, padding=244):
+
+        img = tf.io.read_file(self.image)
+        img = tf.io.decode_jpeg(img, channels=3)
+        img = tf.image.resize_with_pad(img, padding, padding)
+        img  = tf.image.convert_image_dtype(img, tf.float32)[tf.newaxis, ...]
+
+        return img    
+
+    def show_img(self):
+        img = cv2.imread(self.image)
+        plt.imshow(img)
+        plt.show()
+        
+    def __size__(self):
+        image = cv2.imread(self.image)
+        return image.shape
+ 
+    def hist(self,bgr=False):
+        image = cv2.imread(self.image)
+        
+        if bgr==False:
+            plt.hist(image.ravel(),256,[0,256]); plt.show()
+            
+        if bgr==True:
+            color = ('b','g','r')
+            for i,col in enumerate(color):
+                histr = cv2.calcHist([image],[i],None,[256],[0,256])
+                plt.plot(histr,color = col)
+                plt.xlim([0,256])
+            plt.show()
+        
+    @timer    
+    def plot_contour(self):
+        im = cv2.imread(self.image)
+        imgray = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
+        ret,thresh = cv2.threshold(imgray,127,255,0)
+        contours,hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        img = cv2.drawContours(im, contours, -1, (0,255,0), 3)
+        plt.imshow(img)
+
+    @timer
+    def extract_features(self, algo='SIFT', vector_size=32):
+        image = cv2.imread(self.image)
+        try:
+            if algo=='SIFT':
+                alg = cv2.SIFT_create()
+                
+            if algo=='ORB':
+                alg = cv2.ORB_create()
+        
+            if algo=='KAZE':
+                alg = cv2.KAZE_create()
+
+            kps = alg.detect(image)
+
+            kps = sorted(kps, key=lambda x: -x.response)[:vector_size]
+            kps, features = alg.compute(image, kps)
+            features = features.flatten()
+
+            needed_size = (vector_size * 64)
+            if features.size < needed_size:
+                features = np.concatenate([features, np.zeros(needed_size - features.size)])
+            print(features)
+        
+        except cv2.error as e:
+            print ('Error: ', e)
+            return None
+        
+        return features
+
+
+class data_prep(object):
+    
+    def __init__(self,data_location,labels=None,val_file=True):
+        if val_file==True:
+            t1 = pd.read_csv(data_location)
+            t2 = pd.DataFrame(columns={'embeddings','taxcodes'})
+            t2['embeddings']=t1['embedding'].copy()
+            t2['taxcodes']=t1['taxcode'].copy()
+            embeddings = []
+            for i, row in t1.iterrows():
+                 embeddings.append(json.loads(row.embedding))
+            t3 = pd.DataFrame(data=embeddings)
+                #t2['embeddings'][i]= a 
+            self.data= t3
+            if labels==None:
+                self.labels = t1['taxcode']
+            else:
+                self.labels= labels #expteced a string
+        return None
+    
+    def to_pd(self,data_location):
+            t1 = pd.read_csv(data_location)
+            t2 = pd.DataFrame(columns={'embeddings','taxcodes'})
+            t2['embeddings']=t1['embedding'].copy()
+            t2['taxcodes']=t1['taxcode'].copy()
+            embeddings = []
+            for i, row in t1.iterrows():
+                a = json.loads(row.embedding)
+                t2['embeddings'][i]= a 
+            self.data= t2['embeddings']
+            self.labels = t2['taxcodes']
+            return t2
+            
+    def to_array(self,dtype_data = None,dtype_labels=float):
+        self.np_data = np.array(self.data,dtype=dtype_data)
+        keys = self.labels
+        val_len = len(self.labels)
+        #print(val_len)
+        values= list(range(0, val_len))
+        dictL = dict(zip(keys, values))
+        self.labels = [dictL[item] for item in self.labels] 
+        self.np_labels = np.array(self.labels,dtype=dtype_labels)
+        return self.np_data,self.np_labels
+    
+    def __shape__(self,dtype_data=None,dtype_labels=None):
+        self.np_data = np.array(self.data,dtype=dtype_data)
+        self.np_labels = np.array(self.labels,dtype=dtype_labels)
+        print((self.np_data).shape)
+        print((self.np_labels).shape)
+
+    def split(self,test_size=0.25,random_state=42):
+        (trainD, testD, trainL, testL) = train_test_split(self.np_data, self.np_labels, 
+        test_size=test_size, random_state=random_state)
+        return trainD,testD,trainL,testL
+    
+    
+class knn(object):
+    
+    def __init__(self,trainD,testD,trainL,testL):
+        self.trainD = trainD
+        self.testD = testD
+        self.trainL = trainL
+        self.testL = testL
+        return None
+    
+    def knn_sklearn(self,classes=3,obs=-1):
+        self.model = KNeighborsClassifier(n_neighbors=classes,
+                                     n_jobs=obs)
+        (self.model).fit(self.trainD, self.trainL)
+        acc = (self.model).score(self.testD, self.testL)
+        print("Accuracy: {:.2f}%".format(acc * 100)) ## 69.28% for 17 classes - val_pred
+        return self.model
+        
+    def knn_save_model(self):
+        f = open("model.pickle", "wb")
+        f.write(pickle.dumps(self.model))
+        f.close()
+    
+    def knn_load_model(self,model_file_path):
+        self.model = pickle.loads(open(str(model_file_path)+'.pickle', 'rb').read())
+        return self.model
+
+    def visualize(self,classes=3,obs=-1,n_neightbours=3):
+        
+        cmap_light = ListedColormap(['orange', 'cyan', 'cornflowerblue'])
+        cmap_bold = ListedColormap(['darkorange', 'c', 'darkblue'])
+
+        self.data = np.concatenate((self.trainD,self.testD))
+        self.labels = np.concatenate((self.trainL,self.testL))
+        data_2f = self.data[:,:2] ## taking only 2 feaures 
+        #print(data_2f.shape)
+        #print((self.labels).shape)
+        self.model_visualization = KNeighborsClassifier(n_neighbors=classes,
+                                     n_jobs=obs)
+        (self.model_visualization).fit(data_2f, self.labels)
+        x_min, x_max = data_2f[:, 0].min() - 1, data_2f[:, 0].max() + 1
+        y_min, y_max = data_2f[:, 1].min() - 1, data_2f[:, 1].max() + 1
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.02),
+                             np.arange(y_min, y_max, 0.02))
+        print(xx.shape)
+        print(yy.shape)
+        print(xx[0])
+        print(yy[0])
+        a1 = np.c_[xx.ravel(),yy.ravel()]
+        print(a1.shape)
+        Z = (self.model).predict(np.c_[xx.ravel(), yy.ravel()])
+        
+        # Put the result into a color plot
+        Z = Z.reshape(xx.shape)
+        plt.figure()
+        plt.pcolormesh(xx, yy, Z,  cmap=cmap_light)
+        
+        #plotting the training data
+        plt.scatter(data_2f[:, 0], data_2f[:, 1], c=self.labels,cmap=cmap_bold, 
+                    edgecolor='k', s=20)
+        plt.xlim(xx.min(), xx.max())
+        plt.ylim(yy.min(), yy.max())
+        plt.title("classification (k = %i)" % (n_neightbours))
+        plt.show()
